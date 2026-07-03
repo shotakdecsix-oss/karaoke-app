@@ -164,16 +164,6 @@
 
 <main>
   <section>
-    <h2>💖 好きな曲・アーティスト</h2>
-    <p class="hint">曲名でもアーティスト名でもOK。追加すると保存されます。</p>
-    <div class="input-row">
-      <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
-      <button class="add-btn" id="fav-add">＋</button>
-    </div>
-    <div class="tags" id="fav-tags"></div>
-  </section>
-
-  <section>
     <h2>🎵 これまで歌った曲</h2>
     <p class="hint">「曲名 / アーティスト」の形式がおすすめ。</p>
     <div class="input-row">
@@ -213,6 +203,13 @@
       <span class="hint" style="margin:0">年</span>
     </div>
     <p class="hint" style="margin-top:8px">世代に合った選曲(青春時代の曲など)に使われます。</p>
+    <h2 style="margin-top:16px">💖 好きな曲・アーティスト</h2>
+    <p class="hint">曲名でもアーティスト名でもOK。ここから曲調やノリの好みをAIが読み取り、似た雰囲気の曲を提案します。</p>
+    <div class="input-row">
+      <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
+      <button class="add-btn" id="fav-add">＋</button>
+    </div>
+    <div class="tags" id="fav-tags"></div>
   </section>
 
   <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>

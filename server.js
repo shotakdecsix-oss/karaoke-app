@@ -22,7 +22,9 @@ async function getRecommendations({ favorites, history, mood, moodTags, aroundTo
 - 実在する曲のみ。日本のカラオケ(DAM/JOYSOUND)に入っていそうな曲を優先
 - 「今日すでに自分が歌った曲」「今日その場で歌われた曲」「除外リスト」の曲は選ばない
 - 「今日その場で歌われた曲」は場の雰囲気(年代・ジャンル・盛り上がり度)の手がかりとして活用し、その場に合う選曲をする
-- 好みの傾向(アーティスト・ジャンル・年代)と当日の気分・希望する曲調の両方を考慮する
+- 「好きな曲・アーティスト」の扱い(重要): 挙げられたアーティストの曲をそのまま出すのではなく、リスト全体から曲調やノリの共通性(テンポ、エネルギー、キー感、雰囲気、メロディの傾向)を読み取り、それに似た曲調・ノリの曲を優先して提案する
+- 同じアーティストの曲ばかりにしない。「好きな曲・アーティスト」に挙がったアーティスト本人の曲は5曲中多くても1曲までとし、残りは別のアーティストから似た雰囲気の曲を選ぶ
+- 当日の気分・希望する曲調も考慮する
 - ユーザーの生まれ年から世代を推定し、青春時代(中高生〜20代前半)に流行した曲も適度に織り交ぜる
 - 各曲に、なぜこのユーザーにオススメか短い理由を付ける
 - キーの高さ(例: 高め/普通/低め)と難易度(易しい/普通/難しい)の目安も付ける
@@ -32,7 +34,7 @@ async function getRecommendations({ favorites, history, mood, moodTags, aroundTo
 
   const userPrompt = [
     birthYear ? `プロフィール: ${birthYear}年生まれ` : "",
-    `好きな曲・アーティスト: ${favorites && favorites.length ? favorites.join("、") : "(未登録)"}`,
+    `好きな曲・アーティスト(曲調・ノリの参考。同じアーティストばかり選ばないこと): ${favorites && favorites.length ? favorites.join("、") : "(未登録)"}`,
     `これまで歌った曲: ${history && history.length ? history.join("、") : "(未登録)"}`,
     aroundToday && aroundToday.length ? `今日その場(周り)で歌われた曲: ${aroundToday.join("、")}` : "",
     sungToday && sungToday.length ? `今日すでに自分が歌った曲: ${sungToday.join("、")}` : "",
