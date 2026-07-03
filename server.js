@@ -44,6 +44,9 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     exclude && exclude.length ? `除外リスト(直前に提案済みなので選ばない): ${exclude.join("、")}` : "",
   ].filter(Boolean).join("\n");
 
+  // プリフィルでJSON出力を強制(応答は "{"recommendations":[" の続きから始まる)
+  const PREFILL = '{"recommendations":[';
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -53,15 +56,23 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "user", content: userPrompt },
+        { role: "assistant", content: PREFILL },
+      ],
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Claude API エラー (${res.status}): ${errText.slice(0, 300)}`);
+    console.error(`Claude API エラー (${res.status}):`, errText.slice(0, 1000));
+    if (res.status === 401) throw new Error("APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください");
+    if (res.status === 429) throw new Error("リクエストが混み合っています。少し待ってからもう一度お試しください");
+    if (res.status === 404) throw new Error(`モデル名(${MODEL})が見つかりません。サーバ設定を確認してください`);
+    if (res.status === 529 || res.status >= 500) throw new Error("AIサーバが混雑しています。少し待ってからもう一度お試しください");
+    throw new Error(`Claude API エラー (${res.status})`);
   }
 
   const data = await res.json();
@@ -69,15 +80,46 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("");
+  const full = PREFILL + text;
 
-  // JSON部分を頑健に抽出
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("AIの応答からJSONを抽出できませんでした");
-  const parsed = JSON.parse(match[0]);
-  if (!Array.isArray(parsed.recommendations)) {
-    throw new Error("AIの応答形式が不正です");
+  if (data.stop_reason === "max_tokens") {
+    console.warn("警告: max_tokens で応答が途中切れ。修復パースを試みます。");
   }
-  return parsed.recommendations;
+
+  try {
+    return parseRecommendations(full);
+  } catch (e) {
+    console.error("パース失敗。生応答:\n---\n" + full + "\n---");
+    throw new Error("AIの応答を解析できませんでした。もう一度お試しください");
+  }
+}
+
+// フェンス・前置き・途中切れがあっても頑健にJSONを取り出す
+function parseRecommendations(raw) {
+  let t = raw.replace(/```(?:json)?/gi, "").trim();
+  const start = t.indexOf("{");
+  if (start === -1) throw new Error("JSONが見つかりません");
+  t = t.slice(start);
+
+  // 1) そのままパース
+  const end = t.lastIndexOf("}");
+  if (end !== -1) {
+    try {
+      const parsed = JSON.parse(t.slice(0, end + 1));
+      if (Array.isArray(parsed.recommendations) && parsed.recommendations.length) {
+        return parsed.recommendations;
+      }
+    } catch { /* fallthrough */ }
+  }
+
+  // 2) 修復パース: 完結している曲オブジェクトだけを拾う(途中切れ対策)
+  const items = t.match(/\{[^{}]*"title"[^{}]*\}/g) || [];
+  const recs = items
+    .map((s) => { try { return JSON.parse(s); } catch { return null; } })
+    .filter((r) => r && r.title);
+  if (recs.length) return recs;
+
+  throw new Error("有効な曲データを抽出できませんでした");
 }
 
 // ---- HTTPサーバ ----
