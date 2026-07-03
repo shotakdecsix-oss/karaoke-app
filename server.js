@@ -14,14 +14,16 @@ const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
 const INDEX_PATH = path.join(__dirname, "index.html");
 
 // ---- Claude API 呼び出し ----
-async function getRecommendations({ favorites, history, mood, exclude }) {
+async function getRecommendations({ favorites, history, mood, moodTags, aroundToday, sungToday, birthYear, exclude }) {
   const systemPrompt = `あなたは日本のカラオケに詳しい選曲アドバイザーです。
 ユーザーの好みと気分に合わせて、カラオケで歌うのに適した曲を5曲オススメしてください。
 
 ルール:
 - 実在する曲のみ。日本のカラオケ(DAM/JOYSOUND)に入っていそうな曲を優先
-- ユーザーが既に「歌った曲」に挙げた曲、「除外リスト」の曲は選ばない
-- 好みの傾向(アーティスト・ジャンル・年代)と当日の気分の両方を考慮する
+- 「今日すでに自分が歌った曲」「今日その場で歌われた曲」「除外リスト」の曲は選ばない
+- 「今日その場で歌われた曲」は場の雰囲気(年代・ジャンル・盛り上がり度)の手がかりとして活用し、その場に合う選曲をする
+- 好みの傾向(アーティスト・ジャンル・年代)と当日の気分・希望する曲調の両方を考慮する
+- ユーザーの生まれ年から世代を推定し、青春時代(中高生〜20代前半)に流行した曲も適度に織り交ぜる
 - 各曲に、なぜこのユーザーにオススメか短い理由を付ける
 - キーの高さ(例: 高め/普通/低め)と難易度(易しい/普通/難しい)の目安も付ける
 
@@ -29,9 +31,13 @@ async function getRecommendations({ favorites, history, mood, exclude }) {
 {"recommendations":[{"title":"曲名","artist":"アーティスト名","reason":"オススメ理由","key":"キーの目安","difficulty":"難易度"}]}`;
 
   const userPrompt = [
+    birthYear ? `プロフィール: ${birthYear}年生まれ` : "",
     `好きな曲・アーティスト: ${favorites && favorites.length ? favorites.join("、") : "(未登録)"}`,
     `これまで歌った曲: ${history && history.length ? history.join("、") : "(未登録)"}`,
+    aroundToday && aroundToday.length ? `今日その場(周り)で歌われた曲: ${aroundToday.join("、")}` : "",
+    sungToday && sungToday.length ? `今日すでに自分が歌った曲: ${sungToday.join("、")}` : "",
     `今日の気分: ${mood || "(特になし)"}`,
+    moodTags && moodTags.length ? `希望する曲調: ${moodTags.join("、")}` : "",
     exclude && exclude.length ? `除外リスト(直前に提案済みなので選ばない): ${exclude.join("、")}` : "",
   ].filter(Boolean).join("\n");
 

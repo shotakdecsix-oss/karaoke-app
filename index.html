@@ -82,6 +82,20 @@
     gap: 6px;
   }
   .tag button { background: none; color: var(--muted); font-size: 1rem; padding: 0 2px; }
+  .mood-tags { margin-top: 0; }
+  .mood-tag {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .mood-tag.selected {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-color: transparent;
+    font-weight: bold;
+  }
   .main-btn {
     display: block;
     width: 100%;
@@ -170,8 +184,35 @@
   </section>
 
   <section>
+    <h2>🏟 今日のセッション <span class="hint" style="display:inline">(日付が変わるとリセット)</span></h2>
+    <p class="hint">周りで歌われた曲: 場の雰囲気に合わせ、重複も避けます。</p>
+    <div class="input-row">
+      <input type="text" id="around-input" placeholder="例: 小さな恋のうた" enterkeyhint="done">
+      <button class="add-btn" id="around-add">＋</button>
+    </div>
+    <div class="tags" id="around-tags"></div>
+    <p class="hint" style="margin-top:12px">今日自分が歌った曲: 重複を避けます(履歴にも自動追加)。</p>
+    <div class="input-row">
+      <input type="text" id="sung-input" placeholder="例: 天体観測" enterkeyhint="done">
+      <button class="add-btn" id="sung-add">＋</button>
+    </div>
+    <div class="tags" id="sung-tags"></div>
+  </section>
+
+  <section>
     <h2>🌤 今日の気分</h2>
-    <textarea id="mood" placeholder="例: 疲れてるからしっとりバラード気分。でも最後は盛り上がりたい"></textarea>
+    <div class="tags mood-tags" id="mood-tags"></div>
+    <textarea id="mood" placeholder="例: 疲れてるからしっとりバラード気分。でも最後は盛り上がりたい" style="margin-top:10px"></textarea>
+  </section>
+
+  <section>
+    <h2>👤 プロフィール</h2>
+    <div class="input-row" style="align-items:center">
+      <label for="birth-year" class="hint" style="margin:0;flex-shrink:0">生まれ年:</label>
+      <input type="number" id="birth-year" min="1930" max="2015" style="max-width:120px">
+      <span class="hint" style="margin:0">年</span>
+    </div>
+    <p class="hint" style="margin-top:8px">世代に合った選曲(青春時代の曲など)に使われます。</p>
   </section>
 
   <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>
@@ -186,6 +227,10 @@
   const LS_FAV = "karaoke_favorites";
   const LS_HIST = "karaoke_history";
   const LS_MOOD = "karaoke_mood";
+  const LS_SESSION = "karaoke_session";
+  const LS_MOOD_TAGS = "karaoke_mood_tags";
+  const LS_BIRTH_YEAR = "karaoke_birth_year";
+  const MOOD_TAG_OPTIONS = ["激しい", "しっとり", "ゆっくり", "速い", "高い(高音)", "低い(低音)", "盛り上がる", "泣ける"];
 
   const load = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
   const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -194,10 +239,45 @@
   let history = load(LS_HIST);
   let lastShown = []; // 「別の候補」用の除外リスト
 
+  // 当日セッション(日付が変わるとリセット)
+  const today = new Date().toLocaleDateString("ja-JP");
+  let session;
+  try { session = JSON.parse(localStorage.getItem(LS_SESSION)); } catch { session = null; }
+  if (!session || session.date !== today) session = { date: today, around: [], sung: [] };
+  const saveSession = () => localStorage.setItem(LS_SESSION, JSON.stringify(session));
+  saveSession();
+
   const $ = (id) => document.getElementById(id);
   const moodEl = $("mood");
   moodEl.value = localStorage.getItem(LS_MOOD) || "";
   moodEl.addEventListener("input", () => localStorage.setItem(LS_MOOD, moodEl.value));
+
+  // 曲調タグ(複数選択・任意)
+  let moodTags = load(LS_MOOD_TAGS);
+  function renderMoodTags() {
+    const el = $("mood-tags");
+    el.innerHTML = "";
+    MOOD_TAG_OPTIONS.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mood-tag" + (moodTags.includes(t) ? " selected" : "");
+      btn.textContent = t;
+      btn.onclick = () => {
+        moodTags = moodTags.includes(t) ? moodTags.filter((x) => x !== t) : moodTags.concat(t);
+        save(LS_MOOD_TAGS, moodTags);
+        renderMoodTags();
+      };
+      el.appendChild(btn);
+    });
+  }
+
+  // プロフィール(生まれ年、デフォルト1986)
+  const birthYearEl = $("birth-year");
+  birthYearEl.value = localStorage.getItem(LS_BIRTH_YEAR) || "1986";
+  birthYearEl.addEventListener("change", () => {
+    const y = parseInt(birthYearEl.value, 10);
+    if (y >= 1930 && y <= 2015) localStorage.setItem(LS_BIRTH_YEAR, String(y));
+  });
 
   // ---- タグUI ----
   function renderTags(el, items, onRemove) {
@@ -218,19 +298,33 @@
   function refresh() {
     renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
     renderTags($("hist-tags"), history, (i) => { history.splice(i, 1); save(LS_HIST, history); refresh(); });
+    renderTags($("around-tags"), session.around, (i) => { session.around.splice(i, 1); saveSession(); refresh(); });
+    renderTags($("sung-tags"), session.sung, (i) => { session.sung.splice(i, 1); saveSession(); refresh(); });
   }
-  function addItem(inputEl, arr, key) {
+  function addItem(inputEl, arr, saveFn) {
     const v = inputEl.value.trim();
     if (!v || arr.includes(v)) { inputEl.value = ""; return; }
     arr.push(v);
-    save(key, arr);
+    saveFn();
     inputEl.value = "";
     refresh();
   }
-  $("fav-add").onclick = () => addItem($("fav-input"), favorites, LS_FAV);
-  $("hist-add").onclick = () => addItem($("hist-input"), history, LS_HIST);
-  $("fav-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem($("fav-input"), favorites, LS_FAV); });
-  $("hist-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem($("hist-input"), history, LS_HIST); });
+  function addSungToday(v) {
+    // 今日歌った曲は履歴にも自動追加
+    if (!history.includes(v)) { history.push(v); save(LS_HIST, history); }
+  }
+  const inputs = [
+    ["fav", () => favorites, () => save(LS_FAV, favorites)],
+    ["hist", () => history, () => save(LS_HIST, history)],
+    ["around", () => session.around, saveSession],
+    ["sung", () => session.sung, () => { saveSession(); const arr = session.sung; addSungToday(arr[arr.length - 1]); refresh(); }],
+  ];
+  inputs.forEach(([name, getArr, saveFn]) => {
+    const input = $(name + "-input");
+    const handler = () => addItem(input, getArr(), saveFn);
+    $(name + "-add").onclick = handler;
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") handler(); });
+  });
 
   // ---- オススメ取得 ----
   async function recommend(exclude) {
@@ -250,6 +344,10 @@
           favorites,
           history,
           mood: moodEl.value.trim(),
+          moodTags,
+          aroundToday: session.around,
+          sungToday: session.sung,
+          birthYear: parseInt(birthYearEl.value, 10) || null,
           exclude: exclude || [],
         }),
       });
@@ -295,7 +393,9 @@
       const sangBtn = document.createElement("button");
       sangBtn.textContent = "🎤 歌った";
       sangBtn.onclick = () => {
-        if (!history.includes(label)) { history.push(label); save(LS_HIST, history); refresh(); }
+        if (!history.includes(label)) { history.push(label); save(LS_HIST, history); }
+        if (!session.sung.includes(label)) { session.sung.push(label); saveSession(); }
+        refresh();
         sangBtn.textContent = "✅ 履歴に追加済み";
         sangBtn.classList.add("done");
         sangBtn.disabled = true;
@@ -328,6 +428,7 @@
   $("retry-btn").onclick = () => recommend(lastShown);
 
   refresh();
+  renderMoodTags();
 })();
 </script>
 </body>
