@@ -47,32 +47,57 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
   // プリフィルでJSON出力を強制(応答は "{"recommendations":[" の続きから始まる)
   const PREFILL = '{"recommendations":[';
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages: [
-        { role: "user", content: userPrompt },
-        { role: "assistant", content: PREFILL },
-      ],
-    }),
-  });
+  // 注意: プリフィルは末尾に空白・改行があるとAPIが400を返す。文字列を変える際は要注意
+  const callAPI = (withPrefill) =>
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: withPrefill
+          ? [
+              { role: "user", content: userPrompt },
+              { role: "assistant", content: PREFILL },
+            ]
+          : [{ role: "user", content: userPrompt }],
+      }),
+    });
 
-  if (!res.ok) {
+  // 上流エラーボディから error.message を取り出し、サーバログにも残す
+  const readApiError = async (res) => {
     const errText = await res.text().catch(() => "");
     console.error(`Claude API エラー (${res.status}):`, errText.slice(0, 1000));
-    if (res.status === 401) throw new Error("APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください");
+    try {
+      return JSON.parse(errText).error.message || errText.slice(0, 200);
+    } catch {
+      return errText.slice(0, 200);
+    }
+  };
+
+  let usedPrefill = true;
+  let res = await callAPI(true);
+
+  if (res.status === 400) {
+    // プリフィル非対応モデル等の可能性 → プリフィルなしで1回だけ自動再試行
+    const firstMsg = await readApiError(res);
+    console.warn(`400を受信(${firstMsg})。プリフィルなしで再試行します`);
+    usedPrefill = false;
+    res = await callAPI(false);
+  }
+
+  if (!res.ok) {
+    const msg = await readApiError(res);
+    if (res.status === 401) throw new Error(`APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください (${msg})`);
     if (res.status === 429) throw new Error("リクエストが混み合っています。少し待ってからもう一度お試しください");
-    if (res.status === 404) throw new Error(`モデル名(${MODEL})が見つかりません。サーバ設定を確認してください`);
+    if (res.status === 404) throw new Error(`モデル名(${MODEL})が見つかりません: ${msg}`);
     if (res.status === 529 || res.status >= 500) throw new Error("AIサーバが混雑しています。少し待ってからもう一度お試しください");
-    throw new Error(`Claude API エラー (${res.status})`);
+    throw new Error(`Claude API エラー (${res.status}): ${msg}`);
   }
 
   const data = await res.json();
@@ -80,7 +105,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("");
-  const full = PREFILL + text;
+  const full = (usedPrefill ? PREFILL : "") + text;
 
   if (data.stop_reason === "max_tokens") {
     console.warn("警告: max_tokens で応答が途中切れ。修復パースを試みます。");
