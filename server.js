@@ -13,6 +13,20 @@ const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
 
 const INDEX_PATH = path.join(__dirname, "index.html");
 
+// デプロイ(コード更新)日時: server.js と index.html の mtime の新しい方を日本時間で
+function getBuildTime() {
+  try {
+    const times = [INDEX_PATH, __filename].map((f) => fs.statSync(f).mtimeMs);
+    return new Date(Math.max(...times)).toLocaleString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric", month: "numeric", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    }) + " JST";
+  } catch {
+    return "不明";
+  }
+}
+
 // ---- Claude API 呼び出し ----
 async function getRecommendations({ favorites, mood, moodTags, aroundToday, sungToday, birthYear, blacklist, exclude }) {
   const systemPrompt = `あなたは日本のカラオケに詳しい選曲アドバイザーです。
@@ -192,15 +206,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 静的配信(index.html のみ)
+  // 静的配信(index.html のみ、ビルド日時を埋め込み)
   if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-    return fs.readFile(INDEX_PATH, (err, data) => {
+    return fs.readFile(INDEX_PATH, "utf8", (err, html) => {
       if (err) {
         res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         return res.end("index.html を読み込めません");
       }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(data);
+      res.end(html.replace("__BUILD_TIME__", getBuildTime()));
     });
   }
 
