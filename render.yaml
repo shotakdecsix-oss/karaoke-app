@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: karaoke-app
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node server.js
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false

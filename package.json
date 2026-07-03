@@ -1,0 +1,12 @@
+{
+  "name": "karaoke-app",
+  "version": "1.0.0",
+  "description": "カラオケ曲をAIがオススメしてくれるWebアプリ",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>カラオケAIオススメ</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --card: #1c1c2e;
+    --card2: #26263c;
+    --accent: #ff5c8a;
+    --accent2: #7c6cff;
+    --text: #f0f0f5;
+    --muted: #9a9ab0;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 48px;
+  }
+  header {
+    text-align: center;
+    padding: 24px 16px 12px;
+  }
+  header h1 {
+    font-size: 1.35rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+  main { max-width: 560px; margin: 0 auto; padding: 0 14px; }
+  section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 14px;
+  }
+  section h2 { font-size: 0.95rem; margin-bottom: 8px; }
+  .hint { color: var(--muted); font-size: 0.75rem; margin-bottom: 8px; }
+  .input-row { display: flex; gap: 8px; }
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 16px; /* iOSズーム防止 */
+  }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+  button {
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #fff;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .add-btn {
+    background: var(--accent2);
+    padding: 0 18px;
+    flex-shrink: 0;
+    font-size: 1.2rem;
+  }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tag button { background: none; color: var(--muted); font-size: 1rem; padding: 0 2px; }
+  .main-btn {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 16px;
+    font-size: 1.05rem;
+    font-weight: bold;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .main-btn:disabled { opacity: 0.5; }
+  .retry-btn {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+  }
+  .song-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  .song-card h3 { font-size: 1.05rem; }
+  .song-card .artist { color: var(--accent2); font-size: 0.85rem; margin-top: 2px; }
+  .song-card .reason { font-size: 0.85rem; margin-top: 8px; line-height: 1.5; }
+  .meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .badge {
+    background: var(--card2);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .actions button {
+    flex: 1;
+    padding: 10px;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    font-size: 0.85rem;
+  }
+  .actions button.done { background: var(--accent2); border-color: transparent; }
+  #status { text-align: center; color: var(--muted); margin-top: 16px; font-size: 0.85rem; }
+  .error { color: #ff8080 !important; }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: -3px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎤 カラオケAIオススメ</h1>
+  <p>あなたの好みと気分に合わせてAIが選曲します</p>
+</header>
+
+<main>
+  <section>
+    <h2>💖 好きな曲・アーティスト</h2>
+    <p class="hint">曲名でもアーティスト名でもOK。追加すると保存されます。</p>
+    <div class="input-row">
+      <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
+      <button class="add-btn" id="fav-add">＋</button>
+    </div>
+    <div class="tags" id="fav-tags"></div>
+  </section>
+
+  <section>
+    <h2>🎵 これまで歌った曲</h2>
+    <p class="hint">「曲名 / アーティスト」の形式がおすすめ。</p>
+    <div class="input-row">
+      <input type="text" id="hist-input" placeholder="例: 残酷な天使のテーゼ" enterkeyhint="done">
+      <button class="add-btn" id="hist-add">＋</button>
+    </div>
+    <div class="tags" id="hist-tags"></div>
+  </section>
+
+  <section>
+    <h2>🌤 今日の気分</h2>
+    <textarea id="mood" placeholder="例: 疲れてるからしっとりバラード気分。でも最後は盛り上がりたい"></textarea>
+  </section>
+
+  <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>
+
+  <div id="status"></div>
+  <div id="results"></div>
+  <button class="retry-btn" id="retry-btn" style="display:none">🔄 別の候補を出す</button>
+</main>
+
+<script>
+(() => {
+  const LS_FAV = "karaoke_favorites";
+  const LS_HIST = "karaoke_history";
+  const LS_MOOD = "karaoke_mood";
+
+  const load = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+  const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+  let favorites = load(LS_FAV);
+  let history = load(LS_HIST);
+  let lastShown = []; // 「別の候補」用の除外リスト
+
+  const $ = (id) => document.getElementById(id);
+  const moodEl = $("mood");
+  moodEl.value = localStorage.getItem(LS_MOOD) || "";
+  moodEl.addEventListener("input", () => localStorage.setItem(LS_MOOD, moodEl.value));
+
+  // ---- タグUI ----
+  function renderTags(el, items, onRemove) {
+    el.innerHTML = "";
+    items.forEach((item, i) => {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      const text = document.createTextNode(item);
+      const btn = document.createElement("button");
+      btn.textContent = "✕";
+      btn.setAttribute("aria-label", item + " を削除");
+      btn.onclick = () => onRemove(i);
+      tag.appendChild(text);
+      tag.appendChild(btn);
+      el.appendChild(tag);
+    });
+  }
+  function refresh() {
+    renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
+    renderTags($("hist-tags"), history, (i) => { history.splice(i, 1); save(LS_HIST, history); refresh(); });
+  }
+  function addItem(inputEl, arr, key) {
+    const v = inputEl.value.trim();
+    if (!v || arr.includes(v)) { inputEl.value = ""; return; }
+    arr.push(v);
+    save(key, arr);
+    inputEl.value = "";
+    refresh();
+  }
+  $("fav-add").onclick = () => addItem($("fav-input"), favorites, LS_FAV);
+  $("hist-add").onclick = () => addItem($("hist-input"), history, LS_HIST);
+  $("fav-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem($("fav-input"), favorites, LS_FAV); });
+  $("hist-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addItem($("hist-input"), history, LS_HIST); });
+
+  // ---- オススメ取得 ----
+  async function recommend(exclude) {
+    const btn = $("recommend-btn");
+    const retry = $("retry-btn");
+    const status = $("status");
+    btn.disabled = true;
+    retry.style.display = "none";
+    status.className = "";
+    status.innerHTML = '<span class="spinner"></span>AIが選曲中…(10秒ほどかかります)';
+
+    try {
+      const res = await fetch("/api/recommend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          favorites,
+          history,
+          mood: moodEl.value.trim(),
+          exclude: exclude || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "取得に失敗しました");
+      showResults(data.recommendations);
+      status.textContent = "";
+    } catch (e) {
+      status.className = "error";
+      status.textContent = "エラー: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function showResults(recs) {
+    const results = $("results");
+    results.innerHTML = "";
+    lastShown = lastShown.concat(recs.map((r) => `${r.title} / ${r.artist}`));
+
+    recs.forEach((r) => {
+      const card = document.createElement("div");
+      card.className = "song-card";
+
+      const h3 = document.createElement("h3");
+      h3.textContent = r.title;
+      const artist = document.createElement("div");
+      artist.className = "artist";
+      artist.textContent = r.artist;
+      const reason = document.createElement("div");
+      reason.className = "reason";
+      reason.textContent = r.reason || "";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      if (r.key) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "キー: " + r.key; meta.appendChild(b); }
+      if (r.difficulty) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "難易度: " + r.difficulty; meta.appendChild(b); }
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const label = `${r.title} / ${r.artist}`;
+
+      const sangBtn = document.createElement("button");
+      sangBtn.textContent = "🎤 歌った";
+      sangBtn.onclick = () => {
+        if (!history.includes(label)) { history.push(label); save(LS_HIST, history); refresh(); }
+        sangBtn.textContent = "✅ 履歴に追加済み";
+        sangBtn.classList.add("done");
+        sangBtn.disabled = true;
+      };
+
+      const likeBtn = document.createElement("button");
+      likeBtn.textContent = "💖 好き";
+      likeBtn.onclick = () => {
+        if (!favorites.includes(label)) { favorites.push(label); save(LS_FAV, favorites); refresh(); }
+        likeBtn.textContent = "✅ 好きに追加済み";
+        likeBtn.classList.add("done");
+        likeBtn.disabled = true;
+      };
+
+      actions.appendChild(sangBtn);
+      actions.appendChild(likeBtn);
+
+      card.appendChild(h3);
+      card.appendChild(artist);
+      card.appendChild(reason);
+      card.appendChild(meta);
+      card.appendChild(actions);
+      results.appendChild(card);
+    });
+
+    $("retry-btn").style.display = "block";
+  }
+
+  $("recommend-btn").onclick = () => { lastShown = []; recommend([]); };
+  $("retry-btn").onclick = () => recommend(lastShown);
+
+  refresh();
+})();
+</script>
+</body>
+</html>
