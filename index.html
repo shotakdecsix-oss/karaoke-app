@@ -83,6 +83,24 @@
   }
   .tag button { background: none; color: var(--muted); font-size: 1rem; padding: 0 2px; }
   .mood-tags { margin-top: 0; }
+  .accordion summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 4px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .accordion summary::before { content: "▸ "; color: var(--muted); }
+  .accordion[open] summary::before { content: "▾ "; }
+  .count-badge {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    vertical-align: 2px;
+  }
   .mood-tag {
     background: var(--card2);
     border: 1px solid #3a3a55;
@@ -203,9 +221,11 @@
       <button class="add-btn" id="fav-add">＋</button>
     </div>
     <div class="tags" id="fav-tags"></div>
-    <h2 style="margin-top:16px">🚫 歌わない・知らない曲</h2>
-    <p class="hint">オススメ結果で「歌わない・知らない」を押した曲。今後は提案されません。✕で解除できます。</p>
-    <div class="tags" id="black-tags"></div>
+    <details class="accordion" style="margin-top:16px">
+      <summary><h2 style="display:inline">🚫 歌わない・知らない曲</h2> <span class="count-badge" id="black-count">0</span></summary>
+      <p class="hint" style="margin-top:8px">オススメ結果で「歌わない・知らない」を押した曲。今後は提案されません。✕で解除できます。</p>
+      <div class="tags" id="black-tags"></div>
+    </details>
   </section>
 
   <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>
@@ -292,6 +312,7 @@
   function refresh() {
     renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
     renderTags($("black-tags"), blacklist, (i) => { blacklist.splice(i, 1); save(LS_BLACK, blacklist); refresh(); });
+    $("black-count").textContent = blacklist.length;
     renderTags($("around-tags"), session.around, (i) => { session.around.splice(i, 1); saveSession(); refresh(); });
     renderTags($("sung-tags"), session.sung, (i) => { session.sung.splice(i, 1); saveSession(); refresh(); });
   }
