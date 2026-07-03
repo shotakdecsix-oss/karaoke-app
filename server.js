@@ -14,13 +14,14 @@ const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
 const INDEX_PATH = path.join(__dirname, "index.html");
 
 // ---- Claude API 呼び出し ----
-async function getRecommendations({ favorites, history, mood, moodTags, aroundToday, sungToday, birthYear, exclude }) {
+async function getRecommendations({ favorites, mood, moodTags, aroundToday, sungToday, birthYear, blacklist, exclude }) {
   const systemPrompt = `あなたは日本のカラオケに詳しい選曲アドバイザーです。
 ユーザーの好みと気分に合わせて、カラオケで歌うのに適した曲を5曲オススメしてください。
 
 ルール:
 - 実在する曲のみ。日本のカラオケ(DAM/JOYSOUND)に入っていそうな曲を優先
 - 「今日すでに自分が歌った曲」「今日その場で歌われた曲」「除外リスト」の曲は選ばない
+- 「ブラックリスト」の曲は絶対に提案しない(ユーザーが歌わない・知らないと明示した曲)
 - 「今日その場で歌われた曲」は場の雰囲気(年代・ジャンル・盛り上がり度)の手がかりとして活用し、その場に合う選曲をする
 - 「好きな曲・アーティスト」の扱い(重要): 挙げられたアーティストの曲をそのまま出すのではなく、リスト全体から曲調やノリの共通性(テンポ、エネルギー、キー感、雰囲気、メロディの傾向)を読み取り、それに似た曲調・ノリの曲を優先して提案する
 - 同じアーティストの曲ばかりにしない。「好きな曲・アーティスト」に挙がったアーティスト本人の曲は5曲中多くても1曲までとし、残りは別のアーティストから似た雰囲気の曲を選ぶ
@@ -35,11 +36,11 @@ async function getRecommendations({ favorites, history, mood, moodTags, aroundTo
   const userPrompt = [
     birthYear ? `プロフィール: ${birthYear}年生まれ` : "",
     `好きな曲・アーティスト(曲調・ノリの参考。同じアーティストばかり選ばないこと): ${favorites && favorites.length ? favorites.join("、") : "(未登録)"}`,
-    `これまで歌った曲: ${history && history.length ? history.join("、") : "(未登録)"}`,
     aroundToday && aroundToday.length ? `今日その場(周り)で歌われた曲: ${aroundToday.join("、")}` : "",
     sungToday && sungToday.length ? `今日すでに自分が歌った曲: ${sungToday.join("、")}` : "",
     `今日の気分: ${mood || "(特になし)"}`,
     moodTags && moodTags.length ? `希望する曲調: ${moodTags.join("、")}` : "",
+    blacklist && blacklist.length ? `ブラックリスト(絶対に提案しない): ${blacklist.join("、")}` : "",
     exclude && exclude.length ? `除外リスト(直前に提案済みなので選ばない): ${exclude.join("、")}` : "",
   ].filter(Boolean).join("\n");
 

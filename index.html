@@ -132,13 +132,15 @@
     font-size: 0.72rem;
     color: var(--muted);
   }
-  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
   .actions button {
     flex: 1;
-    padding: 10px;
+    min-width: 90px;
+    padding: 10px 6px;
     background: var(--card2);
     border: 1px solid #3a3a55;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
   .actions button.done { background: var(--accent2); border-color: transparent; }
   #status { text-align: center; color: var(--muted); margin-top: 16px; font-size: 0.85rem; }
@@ -164,24 +166,14 @@
 
 <main>
   <section>
-    <h2>🎵 これまで歌った曲</h2>
-    <p class="hint">「曲名 / アーティスト」の形式がおすすめ。</p>
-    <div class="input-row">
-      <input type="text" id="hist-input" placeholder="例: 残酷な天使のテーゼ" enterkeyhint="done">
-      <button class="add-btn" id="hist-add">＋</button>
-    </div>
-    <div class="tags" id="hist-tags"></div>
-  </section>
-
-  <section>
-    <h2>🏟 今日のセッション <span class="hint" style="display:inline">(日付が変わるとリセット)</span></h2>
+    <h2>🏟 今日のセッション <span class="hint" style="display:inline">(朝6時にリセット)</span></h2>
     <p class="hint">周りで歌われた曲: 場の雰囲気に合わせ、重複も避けます。</p>
     <div class="input-row">
       <input type="text" id="around-input" placeholder="例: 小さな恋のうた" enterkeyhint="done">
       <button class="add-btn" id="around-add">＋</button>
     </div>
     <div class="tags" id="around-tags"></div>
-    <p class="hint" style="margin-top:12px">今日自分が歌った曲: 重複を避けます(履歴にも自動追加)。</p>
+    <p class="hint" style="margin-top:12px">今日自分が歌った曲: 重複を避けます。</p>
     <div class="input-row">
       <input type="text" id="sung-input" placeholder="例: 天体観測" enterkeyhint="done">
       <button class="add-btn" id="sung-add">＋</button>
@@ -210,6 +202,9 @@
       <button class="add-btn" id="fav-add">＋</button>
     </div>
     <div class="tags" id="fav-tags"></div>
+    <h2 style="margin-top:16px">🚫 歌わない・知らない曲</h2>
+    <p class="hint">オススメ結果で「歌わない・知らない」を押した曲。今後は提案されません。✕で解除できます。</p>
+    <div class="tags" id="black-tags"></div>
   </section>
 
   <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>
@@ -222,7 +217,7 @@
 <script>
 (() => {
   const LS_FAV = "karaoke_favorites";
-  const LS_HIST = "karaoke_history";
+  const LS_BLACK = "karaoke_blacklist";
   const LS_MOOD = "karaoke_mood";
   const LS_SESSION = "karaoke_session";
   const LS_MOOD_TAGS = "karaoke_mood_tags";
@@ -233,14 +228,15 @@
   const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
   let favorites = load(LS_FAV);
-  let history = load(LS_HIST);
+  let blacklist = load(LS_BLACK);
   let lastShown = []; // 「別の候補」用の除外リスト
+  localStorage.removeItem("karaoke_history"); // 旧・累積履歴機能の掃除
 
-  // 当日セッション(日付が変わるとリセット)
-  const today = new Date().toLocaleDateString("ja-JP");
+  // 当日セッション(朝6時にリセット。6時より前は前日扱い = 深夜カラオケで0時をまたいでも維持)
+  const karaokeDay = new Date(Date.now() - 6 * 60 * 60 * 1000).toLocaleDateString("ja-JP");
   let session;
   try { session = JSON.parse(localStorage.getItem(LS_SESSION)); } catch { session = null; }
-  if (!session || session.date !== today) session = { date: today, around: [], sung: [] };
+  if (!session || session.date !== karaokeDay) session = { date: karaokeDay, around: [], sung: [] };
   const saveSession = () => localStorage.setItem(LS_SESSION, JSON.stringify(session));
   saveSession();
 
@@ -294,7 +290,7 @@
   }
   function refresh() {
     renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
-    renderTags($("hist-tags"), history, (i) => { history.splice(i, 1); save(LS_HIST, history); refresh(); });
+    renderTags($("black-tags"), blacklist, (i) => { blacklist.splice(i, 1); save(LS_BLACK, blacklist); refresh(); });
     renderTags($("around-tags"), session.around, (i) => { session.around.splice(i, 1); saveSession(); refresh(); });
     renderTags($("sung-tags"), session.sung, (i) => { session.sung.splice(i, 1); saveSession(); refresh(); });
   }
@@ -306,15 +302,10 @@
     inputEl.value = "";
     refresh();
   }
-  function addSungToday(v) {
-    // 今日歌った曲は履歴にも自動追加
-    if (!history.includes(v)) { history.push(v); save(LS_HIST, history); }
-  }
   const inputs = [
     ["fav", () => favorites, () => save(LS_FAV, favorites)],
-    ["hist", () => history, () => save(LS_HIST, history)],
     ["around", () => session.around, saveSession],
-    ["sung", () => session.sung, () => { saveSession(); const arr = session.sung; addSungToday(arr[arr.length - 1]); refresh(); }],
+    ["sung", () => session.sung, saveSession],
   ];
   inputs.forEach(([name, getArr, saveFn]) => {
     const input = $(name + "-input");
@@ -339,12 +330,12 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           favorites,
-          history,
           mood: moodEl.value.trim(),
           moodTags,
           aroundToday: session.around,
           sungToday: session.sung,
           birthYear: parseInt(birthYearEl.value, 10) || null,
+          blacklist,
           exclude: exclude || [],
         }),
       });
@@ -390,10 +381,9 @@
       const sangBtn = document.createElement("button");
       sangBtn.textContent = "🎤 歌った";
       sangBtn.onclick = () => {
-        if (!history.includes(label)) { history.push(label); save(LS_HIST, history); }
         if (!session.sung.includes(label)) { session.sung.push(label); saveSession(); }
         refresh();
-        sangBtn.textContent = "✅ 履歴に追加済み";
+        sangBtn.textContent = "✅ 追加済み";
         sangBtn.classList.add("done");
         sangBtn.disabled = true;
       };
@@ -407,8 +397,21 @@
         likeBtn.disabled = true;
       };
 
+      const banBtn = document.createElement("button");
+      banBtn.textContent = "🚫 歌わない・知らない";
+      banBtn.onclick = () => {
+        if (!blacklist.includes(label)) { blacklist.push(label); save(LS_BLACK, blacklist); refresh(); }
+        card.style.opacity = "0.4";
+        banBtn.textContent = "✅ 除外済み";
+        banBtn.classList.add("done");
+        banBtn.disabled = true;
+        sangBtn.disabled = true;
+        likeBtn.disabled = true;
+      };
+
       actions.appendChild(sangBtn);
       actions.appendChild(likeBtn);
+      actions.appendChild(banBtn);
 
       card.appendChild(h3);
       card.appendChild(artist);
