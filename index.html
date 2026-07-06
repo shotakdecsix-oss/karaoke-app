@@ -214,13 +214,25 @@
       <span class="hint" style="margin:0">年</span>
     </div>
     <p class="hint" style="margin-top:8px">世代に合った選曲(青春時代の曲など)に使われます。</p>
-    <h2 style="margin-top:16px">💖 好きな曲・アーティスト</h2>
-    <p class="hint">曲名でもアーティスト名でもOK。ここから曲調やノリの好みをAIが読み取り、似た雰囲気の曲を提案します。</p>
-    <div class="input-row">
-      <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
-      <button class="add-btn" id="fav-add">＋</button>
+    <div class="input-row" style="align-items:center;margin-top:12px">
+      <label for="gender" class="hint" style="margin:0;flex-shrink:0">性別:</label>
+      <select id="gender" style="max-width:160px">
+        <option value="">未設定</option>
+        <option value="男性">男性</option>
+        <option value="女性">女性</option>
+        <option value="回答しない">回答しない</option>
+      </select>
     </div>
-    <div class="tags" id="fav-tags"></div>
+    <p class="hint" style="margin-top:8px">似た性別のアーティストを中心に選曲します。「女性曲を歌いたい」など気分欄で伝えれば、そちらを優先します。</p>
+    <details class="accordion" style="margin-top:16px">
+      <summary><h2 style="display:inline">💖 好きな曲・アーティスト</h2> <span class="count-badge" id="fav-count">0</span></summary>
+      <p class="hint" style="margin-top:8px">曲名でもアーティスト名でもOK。ここから曲調やノリの好みをAIが読み取り、似た雰囲気の曲を提案します。</p>
+      <div class="input-row">
+        <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
+        <button class="add-btn" id="fav-add">＋</button>
+      </div>
+      <div class="tags" id="fav-tags"></div>
+    </details>
     <details class="accordion" style="margin-top:16px">
       <summary><h2 style="display:inline">🚫 歌わない・知らない曲</h2> <span class="count-badge" id="black-count">0</span></summary>
       <p class="hint" style="margin-top:8px">オススメ結果で「歌わない・知らない」を押した曲。今後は提案されません。✕で解除できます。</p>
@@ -243,6 +255,7 @@
   const LS_SESSION = "karaoke_session";
   const LS_MOOD_TAGS = "karaoke_mood_tags";
   const LS_BIRTH_YEAR = "karaoke_birth_year";
+  const LS_GENDER = "karaoke_gender";
   const MOOD_TAG_OPTIONS = ["激しい", "しっとり", "ゆっくり", "速い", "高い(高音)", "低い(低音)", "盛り上がる", "泣ける"];
 
   const load = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
@@ -293,6 +306,13 @@
     if (y >= 1930 && y <= 2015) localStorage.setItem(LS_BIRTH_YEAR, String(y));
   });
 
+  // プロフィール(性別)
+  const genderEl = $("gender");
+  genderEl.value = localStorage.getItem(LS_GENDER) || "";
+  genderEl.addEventListener("change", () => {
+    localStorage.setItem(LS_GENDER, genderEl.value);
+  });
+
   // ---- タグUI ----
   function renderTags(el, items, onRemove) {
     el.innerHTML = "";
@@ -312,6 +332,7 @@
   function refresh() {
     renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
     renderTags($("black-tags"), blacklist, (i) => { blacklist.splice(i, 1); save(LS_BLACK, blacklist); refresh(); });
+    $("fav-count").textContent = favorites.length;
     $("black-count").textContent = blacklist.length;
     renderTags($("around-tags"), session.around, (i) => { session.around.splice(i, 1); saveSession(); refresh(); });
     renderTags($("sung-tags"), session.sung, (i) => { session.sung.splice(i, 1); saveSession(); refresh(); });
@@ -357,6 +378,7 @@
           aroundToday: session.around,
           sungToday: session.sung,
           birthYear: parseInt(birthYearEl.value, 10) || null,
+          gender: genderEl.value || null,
           blacklist,
           exclude: exclude || [],
         }),

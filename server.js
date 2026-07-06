@@ -28,7 +28,7 @@ function getBuildTime() {
 }
 
 // ---- Claude API 呼び出し ----
-async function getRecommendations({ favorites, mood, moodTags, aroundToday, sungToday, birthYear, blacklist, exclude }) {
+async function getRecommendations({ favorites, mood, moodTags, aroundToday, sungToday, birthYear, gender, blacklist, exclude }) {
   const systemPrompt = `あなたは日本のカラオケに詳しい選曲アドバイザーです。
 ユーザーの好みと気分に合わせて、カラオケで歌うのに適した曲を5曲オススメしてください。
 
@@ -39,6 +39,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
 - 「今日その場で歌われた曲」は場の雰囲気(年代・ジャンル・盛り上がり度)の手がかりとして活用し、その場に合う選曲をする
 - 「好きな曲・アーティスト」の扱い(重要): 挙げられたアーティストの曲をそのまま出すのではなく、リスト全体から曲調やノリの共通性(テンポ、エネルギー、キー感、雰囲気、メロディの傾向)を読み取り、それに似た曲調・ノリの曲を優先して提案する
 - 同じアーティストの曲ばかりにしない。「好きな曲・アーティスト」に挙がったアーティスト本人の曲は5曲中多くても1曲までとし、残りは別のアーティストから似た雰囲気の曲を選ぶ
+- 「性別」の扱い: 基本的にはユーザーと同じ性別のアーティストの曲を中心に選ぶ(歌いやすいキー・声域の目安になるため)。ただし気分・希望する曲調欄から「女性曲を歌いたい」「異性の曲でもOK」等の希望が読み取れる場合は、その希望を優先して異性アーティストの曲も選ぶ
 - 当日の気分・希望する曲調も考慮する
 - ユーザーの生まれ年から世代を推定し、青春時代(中高生〜20代前半)に流行した曲も適度に織り交ぜる
 - 各曲に、なぜこのユーザーにオススメか短い理由を付ける
@@ -49,6 +50,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
 
   const userPrompt = [
     birthYear ? `プロフィール: ${birthYear}年生まれ` : "",
+    gender ? `性別: ${gender}(基本は同性アーティスト中心。気分・曲調の希望欄で異性曲の希望があればそちらを優先)` : "",
     `好きな曲・アーティスト(曲調・ノリの参考。同じアーティストばかり選ばないこと): ${favorites && favorites.length ? favorites.join("、") : "(未登録)"}`,
     aroundToday && aroundToday.length ? `今日その場(周り)で歌われた曲: ${aroundToday.join("、")}` : "",
     sungToday && sungToday.length ? `今日すでに自分が歌った曲: ${sungToday.join("、")}` : "",
