@@ -527,31 +527,59 @@
     showSkeletons();
     $("result-head").scrollIntoView({ behavior: "smooth", block: "start" });
 
-    try {
-      const res = await fetch("/api/recommend", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          favorites,
-          mood: moodEl.value.trim(),
-          moodTags,
-          aroundToday: session.around,
-          sungToday: session.sung,
-          birthYear: parseInt(birthYearEl.value, 10) || null,
-          gender: genderEl.value || null,
-          blacklist,
-          exclude: exclude || [],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "取得に失敗しました");
-      showResults(data.recommendations);
-    } catch (e) {
-      showError(e.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "オススメしてもらう 🎶";
+    // サーバがスリープ明け(Renderの無料プランは非アクセス時に休止し、
+    // 再起動に数十秒かかることがある)の場合に備え、一時的な失敗は自動で再試行する
+    const RETRYABLE_MSG = /混雑|混み合|過負荷|起動|timeout|タイムアウト/i;
+    const MAX_ATTEMPTS = 3;
+    const BACKOFF_MS = [3000, 8000];
+
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch("/api/recommend", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            favorites,
+            mood: moodEl.value.trim(),
+            moodTags,
+            aroundToday: session.around,
+            sungToday: session.sung,
+            birthYear: parseInt(birthYearEl.value, 10) || null,
+            gender: genderEl.value || null,
+            blacklist,
+            exclude: exclude || [],
+          }),
+        });
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          // JSONでない応答(サーバ起動中のゲートウェイエラー画面など) → 再試行対象
+          throw Object.assign(new Error("サーバーの起動待ちの可能性があります"), { retryable: true });
+        }
+
+        if (!res.ok) {
+          const msg = data.error || "取得に失敗しました";
+          throw Object.assign(new Error(msg), { retryable: RETRYABLE_MSG.test(msg) });
+        }
+
+        showResults(data.recommendations);
+        btn.disabled = false;
+        btn.textContent = "オススメしてもらう 🎶";
+        return;
+      } catch (e) {
+        lastErr = e;
+        const canRetry = (e.retryable || e instanceof TypeError) && attempt < MAX_ATTEMPTS;
+        if (!canRetry) break;
+        setResultHead(`サーバーに接続中…もう少しお待ちください(再試行 ${attempt}/${MAX_ATTEMPTS - 1})`);
+        await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt - 1] || 8000));
+      }
     }
+    showError(lastErr ? lastErr.message : "取得に失敗しました");
+    btn.disabled = false;
+    btn.textContent = "オススメしてもらう 🎶";
   }
 
   function showError(message) {
