@@ -97,52 +97,111 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     }
   };
 
-  let usedPrefill = true;
-  let usedModel = MODEL;
-  let res = await callAPI(true, usedModel);
+  // 1回分の「API呼び出し→パース」をまとめた関数。
+  // パース失敗はモデルの生成揺らぎによる一過性の不具合であることが多いため、
+  // 呼び出し元で複数回リトライできるようにする(致命的な設定系エラーは fatal=true で即終了)
+  async function attemptOnce() {
+    let usedPrefill = true;
+    let usedModel = MODEL;
+    let res = await callAPI(true, usedModel);
 
-  if (res.status === 404 && FALLBACK_MODEL && FALLBACK_MODEL !== usedModel) {
-    // モデル名が見つからない → 旧モデルへ自動フォールバック
-    const firstMsg = await readApiError(res);
-    console.warn(`モデル ${usedModel} が404(${firstMsg})。${FALLBACK_MODEL} で再試行します`);
-    usedModel = FALLBACK_MODEL;
-    res = await callAPI(true, usedModel);
+    if (res.status === 404 && FALLBACK_MODEL && FALLBACK_MODEL !== usedModel) {
+      // モデル名が見つからない → 旧モデルへ自動フォールバック
+      const firstMsg = await readApiError(res);
+      console.warn(`モデル ${usedModel} が404(${firstMsg})。${FALLBACK_MODEL} で再試行します`);
+      usedModel = FALLBACK_MODEL;
+      res = await callAPI(true, usedModel);
+    }
+
+    if (res.status === 400) {
+      // プリフィル非対応モデル等の可能性 → プリフィルなしで1回だけ自動再試行
+      const firstMsg = await readApiError(res);
+      console.warn(`400を受信(${firstMsg})。プリフィルなしで再試行します`);
+      usedPrefill = false;
+      res = await callAPI(false, usedModel);
+    }
+
+    // 一時的なエラー(429=混雑 / 529=過負荷 / 5xx)は少し待って最大2回まで自動再試行
+    for (let retry = 0; !res.ok && (res.status === 429 || res.status === 529 || res.status >= 500) && retry < 2; retry++) {
+      const waitMs = 1500 * 2 ** retry; // 1.5秒 → 3秒
+      console.warn(`一時的なエラー(${res.status})。${waitMs}ms待って再試行します (${retry + 1}/2)`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      res = await callAPI(usedPrefill, usedModel);
+    }
+
+    if (!res.ok) {
+      const msg = await readApiError(res);
+      if (res.status === 401) {
+        throw Object.assign(new Error(`APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください (${msg})`), { fatal: true });
+      }
+      if (res.status === 404) {
+        throw Object.assign(new Error(`モデル名(${usedModel})が見つかりません: ${msg}`), { fatal: true });
+      }
+      if (res.status === 429) throw new Error("リクエストが混み合っています。少し待ってからもう一度お試しください");
+      if (res.status === 529 || res.status >= 500) throw new Error("AIサーバが混雑しています。少し待ってからもう一度お試しください");
+      throw new Error(`Claude API エラー (${res.status}): ${msg}`);
+    }
+
+    const data = await res.json();
+    const text = (data.content || [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    const full = (usedPrefill ? PREFILL : "") + text;
+
+    if (data.stop_reason === "max_tokens") {
+      console.warn("警告: max_tokens で応答が途中切れ。修復パースを試みます。");
+    }
+
+    try {
+      return parseRecommendations(full);
+    } catch (e) {
+      console.error("パース失敗。生応答:\n---\n" + full + "\n---");
+      const snippet = full.replace(/\s+/g, " ").trim().slice(0, 160);
+      throw new Error(`AIの応答を解析できませんでした(応答例: ${snippet || "(空)"}${full.length > 160 ? "…" : ""})`);
+    }
   }
 
-  if (res.status === 400) {
-    // プリフィル非対応モデル等の可能性 → プリフィルなしで1回だけ自動再試行
-    const firstMsg = await readApiError(res);
-    console.warn(`400を受信(${firstMsg})。プリフィルなしで再試行します`);
-    usedPrefill = false;
-    res = await callAPI(false, usedModel);
+  // パース失敗・一時的な生成揺らぎは、生成そのものをやり直せば直ることが多いので
+  // 「API呼び出し→パース」全体を最大2回まで試みる(致命的エラーは即座に終了)
+  const MAX_GEN_ATTEMPTS = 2;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
+    try {
+      return await attemptOnce();
+    } catch (e) {
+      lastErr = e;
+      if (e.fatal || attempt === MAX_GEN_ATTEMPTS) throw e;
+      console.warn(`生成をやり直します(${attempt}/${MAX_GEN_ATTEMPTS - 1})。理由: ${e.message}`);
+    }
   }
+  throw lastErr;
+}
 
-  if (!res.ok) {
-    const msg = await readApiError(res);
-    if (res.status === 401) throw new Error(`APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください (${msg})`);
-    if (res.status === 429) throw new Error("リクエストが混み合っています。少し待ってからもう一度お試しください");
-    if (res.status === 404) throw new Error(`モデル名(${usedModel})が見つかりません: ${msg}`);
-    if (res.status === 529 || res.status >= 500) throw new Error("AIサーバが混雑しています。少し待ってからもう一度お試しください");
-    throw new Error(`Claude API エラー (${res.status}): ${msg}`);
+// 文字列(引用符)内のブレースを無視しつつ、バランスの取れた {...} を
+// すべて(ネストしたものも含めて)抜き出す。曲の理由に "や{}" が含まれていても
+// 正規表現ベースより壊れにくい
+function extractBraceSpans(text) {
+  const spans = [];
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{") stack.push(i);
+    else if (c === "}") {
+      const s = stack.pop();
+      if (s !== undefined) spans.push(text.slice(s, i + 1));
+    }
   }
-
-  const data = await res.json();
-  const text = (data.content || [])
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  const full = (usedPrefill ? PREFILL : "") + text;
-
-  if (data.stop_reason === "max_tokens") {
-    console.warn("警告: max_tokens で応答が途中切れ。修復パースを試みます。");
-  }
-
-  try {
-    return parseRecommendations(full);
-  } catch (e) {
-    console.error("パース失敗。生応答:\n---\n" + full + "\n---");
-    throw new Error("AIの応答を解析できませんでした。もう一度お試しください");
-  }
+  return spans;
 }
 
 // フェンス・前置き・途中切れがあっても頑健にJSONを取り出す
@@ -152,20 +211,22 @@ function parseRecommendations(raw) {
   if (start === -1) throw new Error("JSONが見つかりません");
   t = t.slice(start);
 
-  // 1) そのままパース
-  const end = t.lastIndexOf("}");
-  if (end !== -1) {
+  const spans = extractBraceSpans(t);
+
+  // 1) 一番大きい(=トップレベルの)ブロックを { "recommendations": [...] } としてパース
+  if (spans.length) {
+    const outer = spans.reduce((a, b) => (b.length > a.length ? b : a));
     try {
-      const parsed = JSON.parse(t.slice(0, end + 1));
+      const parsed = JSON.parse(outer);
       if (Array.isArray(parsed.recommendations) && parsed.recommendations.length) {
         return parsed.recommendations;
       }
     } catch { /* fallthrough */ }
   }
 
-  // 2) 修復パース: 完結している曲オブジェクトだけを拾う(途中切れ対策)
-  const items = t.match(/\{[^{}]*"title"[^{}]*\}/g) || [];
-  const recs = items
+  // 2) 修復パース: 完結している曲オブジェクトだけを拾う(途中切れ・壊れ対策)
+  const recs = spans
+    .filter((s) => s.includes('"title"'))
     .map((s) => { try { return JSON.parse(s); } catch { return null; } })
     .filter((r) => r && r.title);
   if (recs.length) return recs;
