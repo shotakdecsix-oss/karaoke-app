@@ -34,8 +34,9 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
 ユーザーの好みと気分に合わせて、カラオケで歌うのに適した曲を5曲オススメしてください。
 
 ルール:
-- 最重要: 実在しない曲・アーティスト、あるいは組み合わせ(その曲を実際には歌っていないアーティスト)を絶対に出力しない。曲名・アーティスト名・その組み合わせが実在すると自信を持って言い切れないものは候補から外し、確実に実在すると分かっている曲だけを選ぶこと
-- 自信がない・うろ覚えの曲を出すくらいなら、有名で確実な定番曲を選ぶ方を優先する(創作・でっち上げは厳禁)
+- 最重要(検索での裏取り必須): 候補に挙げる曲は、出力前に必ずweb検索ツールで「曲名 アーティスト名」を検索し、その曲が実在し、そのアーティストが実際に歌っている曲であることを検索結果で確認すること。うろ覚えのまま出力するのは厳禁
+- 検索しても実在を確認できなかった曲・組み合わせは候補から外す。確認が取れた曲が5曲に満たない場合は、無理に5曲に埋めず、確認できた曲だけを出力してよい(5曲未満でも構わない)
+- 自信がない・うろ覚えの曲を出すくらいなら、検索で存在が確認できる有名で確実な定番曲を優先する(創作・でっち上げは厳禁)
 - 実在する曲のみ。日本のカラオケ(DAM/JOYSOUND)に入っていそうな曲を優先
 - 「今日すでに自分が歌った曲」「今日その場で歌われた曲」「除外リスト」の曲は選ばない
 - 「ブラックリスト」の曲は絶対に提案しない(ユーザーが歌わない・知らないと明示した曲)
@@ -48,7 +49,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
 - 各曲に、なぜこのユーザーにオススメか短い理由を付ける
 - キーの高さ(例: 高め/普通/低め)と難易度(易しい/普通/難しい)の目安も付ける
 
-出力は必ず次のJSON形式のみ(説明文やコードブロック記号は不要):
+検索・検討の過程を経たあと、最後の出力は必ず次のJSON形式のみ(説明文やコードブロック記号は不要。JSON以外の文章を前後に付けない):
 {"recommendations":[{"title":"曲名","artist":"アーティスト名","reason":"オススメ理由","key":"キーの目安","difficulty":"難易度"}]}`;
 
   const userPrompt = [
@@ -63,11 +64,10 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     exclude && exclude.length ? `除外リスト(直前に提案済みなので選ばない): ${exclude.join("、")}` : "",
   ].filter(Boolean).join("\n");
 
-  // プリフィルでJSON出力を強制(応答は "{"recommendations":[" の続きから始まる)
-  const PREFILL = '{"recommendations":[';
-
-  // 注意: プリフィルは末尾に空白・改行があるとAPIが400を返す。文字列を変える際は要注意
-  const callAPI = (withPrefill, model) =>
+  // Web検索ツールで各曲の実在をAI自身に確認させてから出力させる(幻覚対策)。
+  // 検索ツールを使う場合、アシスタント応答のプリフィル(強制続き書き)は
+  // 検索呼び出しの余地を潰してしまうため使わない。JSON抽出は下の頑健パーサーに任せる
+  const callAPI = (model) =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -77,14 +77,12 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: systemPrompt,
-        messages: withPrefill
-          ? [
-              { role: "user", content: userPrompt },
-              { role: "assistant", content: PREFILL },
-            ]
-          : [{ role: "user", content: userPrompt }],
+        tools: [
+          { type: "web_search_20250305", name: "web_search", max_uses: 8 },
+        ],
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
@@ -103,24 +101,15 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
   // パース失敗はモデルの生成揺らぎによる一過性の不具合であることが多いため、
   // 呼び出し元で複数回リトライできるようにする(致命的な設定系エラーは fatal=true で即終了)
   async function attemptOnce() {
-    let usedPrefill = true;
     let usedModel = MODEL;
-    let res = await callAPI(true, usedModel);
+    let res = await callAPI(usedModel);
 
     if (res.status === 404 && FALLBACK_MODEL && FALLBACK_MODEL !== usedModel) {
       // モデル名が見つからない → 旧モデルへ自動フォールバック
       const firstMsg = await readApiError(res);
       console.warn(`モデル ${usedModel} が404(${firstMsg})。${FALLBACK_MODEL} で再試行します`);
       usedModel = FALLBACK_MODEL;
-      res = await callAPI(true, usedModel);
-    }
-
-    if (res.status === 400) {
-      // プリフィル非対応モデル等の可能性 → プリフィルなしで1回だけ自動再試行
-      const firstMsg = await readApiError(res);
-      console.warn(`400を受信(${firstMsg})。プリフィルなしで再試行します`);
-      usedPrefill = false;
-      res = await callAPI(false, usedModel);
+      res = await callAPI(usedModel);
     }
 
     // 一時的なエラー(429=混雑 / 529=過負荷 / 5xx)は少し待って最大2回まで自動再試行
@@ -128,7 +117,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
       const waitMs = 1500 * 2 ** retry; // 1.5秒 → 3秒
       console.warn(`一時的なエラー(${res.status})。${waitMs}ms待って再試行します (${retry + 1}/2)`);
       await new Promise((r) => setTimeout(r, waitMs));
-      res = await callAPI(usedPrefill, usedModel);
+      res = await callAPI(usedModel);
     }
 
     if (!res.ok) {
@@ -145,14 +134,14 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
     }
 
     const data = await res.json();
-    const text = (data.content || [])
+    // text ブロックのみ連結(web_search のツール呼び出し・検索結果ブロックは除外される)
+    const full = (data.content || [])
       .filter((b) => b.type === "text")
       .map((b) => b.text)
       .join("");
-    const full = (usedPrefill ? PREFILL : "") + text;
 
     if (data.stop_reason === "max_tokens") {
-      console.warn("警告: max_tokens で応答が途中切れ。修復パースを試みます。");
+      console.warn("警告: max_tokens で応答が途中切れ(検索を多用した可能性)。修復パースを試みます。");
     }
 
     try {
