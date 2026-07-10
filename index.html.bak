@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>カラオケAIオススメ</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --card: #1c1c2e;
+    --card2: #26263c;
+    --accent: #ff5c8a;
+    --accent2: #7c6cff;
+    --text: #f0f0f5;
+    --muted: #9a9ab0;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 48px;
+  }
+  header {
+    text-align: center;
+    padding: 24px 16px 12px;
+  }
+  header h1 {
+    font-size: 1.35rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+  main { max-width: 560px; margin: 0 auto; padding: 0 14px; }
+  section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 14px;
+  }
+  section h2 { font-size: 0.95rem; margin-bottom: 8px; }
+  .hint { color: var(--muted); font-size: 0.75rem; margin-bottom: 8px; }
+  .input-row { display: flex; gap: 8px; }
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 16px; /* iOSズーム防止 */
+  }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+  button {
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #fff;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .add-btn {
+    background: var(--accent2);
+    padding: 0 18px;
+    flex-shrink: 0;
+    font-size: 1.2rem;
+  }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tag button { background: none; color: var(--muted); font-size: 1rem; padding: 0 2px; }
+  .mood-tags { margin-top: 0; }
+  .accordion summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 4px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .accordion summary::before { content: "▸ "; color: var(--muted); }
+  .accordion[open] summary::before { content: "▾ "; }
+  .count-badge {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    vertical-align: 2px;
+  }
+  .mood-tag {
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .mood-tag.selected {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-color: transparent;
+    font-weight: bold;
+  }
+  .main-btn {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 16px;
+    font-size: 1.05rem;
+    font-weight: bold;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .main-btn:disabled { opacity: 0.5; }
+  .retry-btn {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+  }
+  .song-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  .song-card h3 { font-size: 1.05rem; }
+  .song-card .artist { color: var(--accent2); font-size: 0.85rem; margin-top: 2px; }
+  .song-card .reason { font-size: 0.85rem; margin-top: 8px; line-height: 1.5; }
+  .meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .badge {
+    background: var(--card2);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .actions button {
+    flex: 1;
+    min-width: 90px;
+    padding: 10px 6px;
+    background: var(--card2);
+    border: 1px solid #3a3a55;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  .actions button.done { background: var(--accent2); border-color: transparent; }
+  #status { text-align: center; color: var(--muted); margin-top: 16px; font-size: 0.85rem; }
+  .error { color: #ff8080 !important; }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: -3px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎤 カラオケAIオススメ</h1>
+  <p>あなたの好みと気分に合わせてAIが選曲します</p>
+  <p style="font-size:0.65rem;color:var(--muted);margin-top:2px">更新: __BUILD_TIME__</p>
+</header>
+
+<main>
+  <section>
+    <h2>🏟 今日のセッション <span class="hint" style="display:inline">(朝6時にリセット)</span></h2>
+    <p class="hint">周りで歌われた曲: 場の雰囲気に合わせ、重複も避けます。</p>
+    <div class="input-row">
+      <input type="text" id="around-input" placeholder="例: 小さな恋のうた" enterkeyhint="done">
+      <button class="add-btn" id="around-add">＋</button>
+    </div>
+    <div class="tags" id="around-tags"></div>
+    <p class="hint" style="margin-top:12px">今日自分が歌った曲: 重複を避けます。</p>
+    <div class="input-row">
+      <input type="text" id="sung-input" placeholder="例: 天体観測" enterkeyhint="done">
+      <button class="add-btn" id="sung-add">＋</button>
+    </div>
+    <div class="tags" id="sung-tags"></div>
+  </section>
+
+  <section>
+    <h2>🌤 今日の気分</h2>
+    <div class="tags mood-tags" id="mood-tags"></div>
+    <textarea id="mood" placeholder="例: 疲れてるからしっとりバラード気分。でも最後は盛り上がりたい" style="margin-top:10px"></textarea>
+  </section>
+
+  <section>
+    <h2>👤 プロフィール</h2>
+    <div class="input-row" style="align-items:center">
+      <label for="birth-year" class="hint" style="margin:0;flex-shrink:0">生まれ年:</label>
+      <input type="number" id="birth-year" min="1930" max="2015" style="max-width:120px">
+      <span class="hint" style="margin:0">年</span>
+    </div>
+    <p class="hint" style="margin-top:8px">世代に合った選曲(青春時代の曲など)に使われます。</p>
+    <div class="input-row" style="align-items:center;margin-top:12px">
+      <label for="gender" class="hint" style="margin:0;flex-shrink:0">性別:</label>
+      <select id="gender" style="max-width:160px">
+        <option value="">未設定</option>
+        <option value="男性">男性</option>
+        <option value="女性">女性</option>
+        <option value="回答しない">回答しない</option>
+      </select>
+    </div>
+    <p class="hint" style="margin-top:8px">似た性別のアーティストを中心に選曲します。「女性曲を歌いたい」など気分欄で伝えれば、そちらを優先します。</p>
+    <details class="accordion" style="margin-top:16px">
+      <summary><h2 style="display:inline">💖 好きな曲・アーティスト</h2> <span class="count-badge" id="fav-count">0</span></summary>
+      <p class="hint" style="margin-top:8px">曲名でもアーティスト名でもOK。ここから曲調やノリの好みをAIが読み取り、似た雰囲気の曲を提案します。</p>
+      <div class="input-row">
+        <input type="text" id="fav-input" placeholder="例: YOASOBI、Lemon" enterkeyhint="done">
+        <button class="add-btn" id="fav-add">＋</button>
+      </div>
+      <div class="tags" id="fav-tags"></div>
+    </details>
+    <details class="accordion" style="margin-top:16px">
+      <summary><h2 style="display:inline">🚫 歌わない・知らない曲</h2> <span class="count-badge" id="black-count">0</span></summary>
+      <p class="hint" style="margin-top:8px">オススメ結果で「歌わない・知らない」を押した曲。今後は提案されません。✕で解除できます。</p>
+      <div class="tags" id="black-tags"></div>
+    </details>
+  </section>
+
+  <button class="main-btn" id="recommend-btn">オススメしてもらう 🎶</button>
+
+  <div id="status"></div>
+  <div id="results"></div>
+  <button class="retry-btn" id="retry-btn" style="display:none">🔄 別の候補を出す</button>
+</main>
+
+<script>
+(() => {
+  const LS_FAV = "karaoke_favorites";
+  const LS_BLACK = "karaoke_blacklist";
+  const LS_MOOD = "karaoke_mood";
+  const LS_SESSION = "karaoke_session";
+  const LS_MOOD_TAGS = "karaoke_mood_tags";
+  const LS_BIRTH_YEAR = "karaoke_birth_year";
+  const LS_GENDER = "karaoke_gender";
+  const MOOD_TAG_OPTIONS = ["激しい", "しっとり", "ゆっくり", "速い", "高い(高音)", "低い(低音)", "盛り上がる", "泣ける"];
+
+  const load = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+  const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+  let favorites = load(LS_FAV);
+  let blacklist = load(LS_BLACK);
+  let lastShown = []; // 「別の候補」用の除外リスト
+  localStorage.removeItem("karaoke_history"); // 旧・累積履歴機能の掃除
+
+  // 当日セッション(朝6時にリセット。6時より前は前日扱い = 深夜カラオケで0時をまたいでも維持)
+  const karaokeDay = new Date(Date.now() - 6 * 60 * 60 * 1000).toLocaleDateString("ja-JP");
+  let session;
+  try { session = JSON.parse(localStorage.getItem(LS_SESSION)); } catch { session = null; }
+  if (!session || session.date !== karaokeDay) session = { date: karaokeDay, around: [], sung: [] };
+  const saveSession = () => localStorage.setItem(LS_SESSION, JSON.stringify(session));
+  saveSession();
+
+  const $ = (id) => document.getElementById(id);
+  const moodEl = $("mood");
+  moodEl.value = localStorage.getItem(LS_MOOD) || "";
+  moodEl.addEventListener("input", () => localStorage.setItem(LS_MOOD, moodEl.value));
+
+  // 曲調タグ(複数選択・任意)
+  let moodTags = load(LS_MOOD_TAGS);
+  function renderMoodTags() {
+    const el = $("mood-tags");
+    el.innerHTML = "";
+    MOOD_TAG_OPTIONS.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mood-tag" + (moodTags.includes(t) ? " selected" : "");
+      btn.textContent = t;
+      btn.onclick = () => {
+        moodTags = moodTags.includes(t) ? moodTags.filter((x) => x !== t) : moodTags.concat(t);
+        save(LS_MOOD_TAGS, moodTags);
+        renderMoodTags();
+      };
+      el.appendChild(btn);
+    });
+  }
+
+  // プロフィール(生まれ年、デフォルト1986)
+  const birthYearEl = $("birth-year");
+  birthYearEl.value = localStorage.getItem(LS_BIRTH_YEAR) || "1986";
+  birthYearEl.addEventListener("change", () => {
+    const y = parseInt(birthYearEl.value, 10);
+    if (y >= 1930 && y <= 2015) localStorage.setItem(LS_BIRTH_YEAR, String(y));
+  });
+
+  // プロフィール(性別)
+  const genderEl = $("gender");
+  genderEl.value = localStorage.getItem(LS_GENDER) || "";
+  genderEl.addEventListener("change", () => {
+    localStorage.setItem(LS_GENDER, genderEl.value);
+  });
+
+  // ---- タグUI ----
+  function renderTags(el, items, onRemove) {
+    el.innerHTML = "";
+    items.forEach((item, i) => {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      const text = document.createTextNode(item);
+      const btn = document.createElement("button");
+      btn.textContent = "✕";
+      btn.setAttribute("aria-label", item + " を削除");
+      btn.onclick = () => onRemove(i);
+      tag.appendChild(text);
+      tag.appendChild(btn);
+      el.appendChild(tag);
+    });
+  }
+  function refresh() {
+    renderTags($("fav-tags"), favorites, (i) => { favorites.splice(i, 1); save(LS_FAV, favorites); refresh(); });
+    renderTags($("black-tags"), blacklist, (i) => { blacklist.splice(i, 1); save(LS_BLACK, blacklist); refresh(); });
+    $("fav-count").textContent = favorites.length;
+    $("black-count").textContent = blacklist.length;
+    renderTags($("around-tags"), session.around, (i) => { session.around.splice(i, 1); saveSession(); refresh(); });
+    renderTags($("sung-tags"), session.sung, (i) => { session.sung.splice(i, 1); saveSession(); refresh(); });
+  }
+  function addItem(inputEl, arr, saveFn) {
+    const v = inputEl.value.trim();
+    if (!v || arr.includes(v)) { inputEl.value = ""; return; }
+    arr.push(v);
+    saveFn();
+    inputEl.value = "";
+    refresh();
+  }
+  const inputs = [
+    ["fav", () => favorites, () => save(LS_FAV, favorites)],
+    ["around", () => session.around, saveSession],
+    ["sung", () => session.sung, saveSession],
+  ];
+  inputs.forEach(([name, getArr, saveFn]) => {
+    const input = $(name + "-input");
+    const handler = () => addItem(input, getArr(), saveFn);
+    $(name + "-add").onclick = handler;
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") handler(); });
+  });
+
+  // ---- オススメ取得 ----
+  async function recommend(exclude) {
+    const btn = $("recommend-btn");
+    const retry = $("retry-btn");
+    const status = $("status");
+    btn.disabled = true;
+    retry.style.display = "none";
+    status.className = "";
+    status.innerHTML = '<span class="spinner"></span>AIが選曲中…(10秒ほどかかります)';
+
+    try {
+      const res = await fetch("/api/recommend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          favorites,
+          mood: moodEl.value.trim(),
+          moodTags,
+          aroundToday: session.around,
+          sungToday: session.sung,
+          birthYear: parseInt(birthYearEl.value, 10) || null,
+          gender: genderEl.value || null,
+          blacklist,
+          exclude: exclude || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "取得に失敗しました");
+      showResults(data.recommendations);
+      status.textContent = "";
+    } catch (e) {
+      status.className = "error";
+      status.textContent = "エラー: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function showResults(recs) {
+    const results = $("results");
+    results.innerHTML = "";
+    lastShown = lastShown.concat(recs.map((r) => `${r.title} / ${r.artist}`));
+
+    recs.forEach((r) => {
+      const card = document.createElement("div");
+      card.className = "song-card";
+
+      const h3 = document.createElement("h3");
+      h3.textContent = r.title;
+      const artist = document.createElement("div");
+      artist.className = "artist";
+      artist.textContent = r.artist;
+      const reason = document.createElement("div");
+      reason.className = "reason";
+      reason.textContent = r.reason || "";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      if (r.key) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "キー: " + r.key; meta.appendChild(b); }
+      if (r.difficulty) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "難易度: " + r.difficulty; meta.appendChild(b); }
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const label = `${r.title} / ${r.artist}`;
+
+      const sangBtn = document.createElement("button");
+      sangBtn.textContent = "🎤 歌った";
+      sangBtn.onclick = () => {
+        if (!session.sung.includes(label)) { session.sung.push(label); saveSession(); }
+        refresh();
+        sangBtn.textContent = "✅ 追加済み";
+        sangBtn.classList.add("done");
+        sangBtn.disabled = true;
+      };
+
+      const likeBtn = document.createElement("button");
+      likeBtn.textContent = "💖 好き";
+      likeBtn.onclick = () => {
+        if (!favorites.includes(label)) { favorites.push(label); save(LS_FAV, favorites); refresh(); }
+        likeBtn.textContent = "✅ 好きに追加済み";
+        likeBtn.classList.add("done");
+        likeBtn.disabled = true;
+      };
+
+      const banBtn = document.createElement("button");
+      banBtn.textContent = "🚫 歌わない・知らない";
+      banBtn.onclick = () => {
+        if (!blacklist.includes(label)) { blacklist.push(label); save(LS_BLACK, blacklist); refresh(); }
+        card.style.opacity = "0.4";
+        banBtn.textContent = "✅ 除外済み";
+        banBtn.classList.add("done");
+        banBtn.disabled = true;
+        sangBtn.disabled = true;
+        likeBtn.disabled = true;
+      };
+
+      actions.appendChild(sangBtn);
+      actions.appendChild(likeBtn);
+      actions.appendChild(banBtn);
+
+      card.appendChild(h3);
+      card.appendChild(artist);
+      card.appendChild(reason);
+      card.appendChild(meta);
+      card.appendChild(actions);
+      results.appendChild(card);
+    });
+
+    $("retry-btn").style.display = "block";
+  }
+
+  $("recommend-btn").onclick = () => { lastShown = []; recommend([]); };
+  $("retry-btn").onclick = () => recommend(lastShown);
+
+  refresh();
+  renderMoodTags();
+})();
+</script>
+</body>
+</html>

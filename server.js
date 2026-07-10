@@ -9,7 +9,8 @@ const path = require("path");
 const PORT = process.env.PORT || 8080;
 const HOST = "0.0.0.0";
 const API_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
+const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
+const FALLBACK_MODEL = "claude-haiku-4-5-20251001"; // MODEL が404のとき自動で切替
 
 const INDEX_PATH = path.join(__dirname, "index.html");
 
@@ -64,7 +65,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
   const PREFILL = '{"recommendations":[';
 
   // 注意: プリフィルは末尾に空白・改行があるとAPIが400を返す。文字列を変える際は要注意
-  const callAPI = (withPrefill) =>
+  const callAPI = (withPrefill, model) =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -73,7 +74,7 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         max_tokens: 4000,
         system: systemPrompt,
         messages: withPrefill
@@ -97,21 +98,30 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
   };
 
   let usedPrefill = true;
-  let res = await callAPI(true);
+  let usedModel = MODEL;
+  let res = await callAPI(true, usedModel);
+
+  if (res.status === 404 && FALLBACK_MODEL && FALLBACK_MODEL !== usedModel) {
+    // モデル名が見つからない → 旧モデルへ自動フォールバック
+    const firstMsg = await readApiError(res);
+    console.warn(`モデル ${usedModel} が404(${firstMsg})。${FALLBACK_MODEL} で再試行します`);
+    usedModel = FALLBACK_MODEL;
+    res = await callAPI(true, usedModel);
+  }
 
   if (res.status === 400) {
     // プリフィル非対応モデル等の可能性 → プリフィルなしで1回だけ自動再試行
     const firstMsg = await readApiError(res);
     console.warn(`400を受信(${firstMsg})。プリフィルなしで再試行します`);
     usedPrefill = false;
-    res = await callAPI(false);
+    res = await callAPI(false, usedModel);
   }
 
   if (!res.ok) {
     const msg = await readApiError(res);
     if (res.status === 401) throw new Error(`APIキーが無効です。サーバの ANTHROPIC_API_KEY を確認してください (${msg})`);
     if (res.status === 429) throw new Error("リクエストが混み合っています。少し待ってからもう一度お試しください");
-    if (res.status === 404) throw new Error(`モデル名(${MODEL})が見つかりません: ${msg}`);
+    if (res.status === 404) throw new Error(`モデル名(${usedModel})が見つかりません: ${msg}`);
     if (res.status === 529 || res.status >= 500) throw new Error("AIサーバが混雑しています。少し待ってからもう一度お試しください");
     throw new Error(`Claude API エラー (${res.status}): ${msg}`);
   }
