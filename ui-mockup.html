@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>カラオケAIオススメ モックアップ</title>
+<style>
+:root {
+  --bg:#0f0f1a; --card:#1c1c2e; --card2:#26263c; --line:#3a3a55;
+  --accent:#ff5c8a; --accent2:#7c6cff;
+  --grad:linear-gradient(90deg,var(--accent),var(--accent2));
+  --text:#f0f0f5; --muted:#9a9ab0; --radius:14px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;
+  background:var(--bg); color:var(--text); min-height:100vh;
+}
+.phone { max-width:420px; margin:0 auto; padding:0 14px 110px; }
+
+/* ── ヘッダー ── */
+header { display:flex; align-items:center; justify-content:space-between; padding:20px 2px 6px; }
+header h1 {
+  font-size:1.25rem;
+  background:var(--grad); -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+.gear {
+  width:44px; height:44px; border-radius:50%; position:relative;
+  background:var(--card); border:1px solid var(--line); color:var(--muted);
+  font-size:18px; cursor:pointer;
+}
+.gear .dot { position:absolute; top:6px; right:6px; width:8px; height:8px;
+  border-radius:50%; background:var(--accent); }
+
+section { background:var(--card); border-radius:var(--radius); padding:14px; margin-top:14px; }
+section h2 { font-size:.95rem; margin-bottom:10px; }
+.hint { color:var(--muted); font-size:.75rem; margin-bottom:8px; }
+
+/* ── チップ / タグ（統一言語） ── */
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip {
+  min-height:44px; padding:10px 16px; border-radius:999px;
+  background:var(--card2); border:1px solid var(--line); color:var(--text);
+  font-size:.85rem; cursor:pointer; font-family:inherit;
+}
+.chip.sel { background:var(--grad); border-color:transparent; font-weight:700; color:#fff; }
+.tag {
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--card2); border:1px solid var(--line); border-radius:999px;
+  padding:8px 8px 8px 14px; font-size:.8rem;
+}
+.tag button { background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; padding:2px 6px; }
+textarea, input[type=text] {
+  width:100%; background:var(--card2); border:1px solid var(--line);
+  border-radius:10px; color:var(--text); padding:13px; font-size:16px; outline:none;
+}
+textarea { resize:vertical; min-height:60px; margin-top:10px; }
+input:focus, textarea:focus { outline:2px solid var(--accent2); border-color:transparent; }
+.input-row { display:flex; gap:8px; }
+.add-btn {
+  background:var(--accent2); color:#fff; border:none; border-radius:10px;
+  min-width:48px; height:48px; font-size:1.2rem; cursor:pointer;
+}
+
+/* ── 結果 ── */
+.result-head { margin-top:22px; font-size:.85rem; color:var(--muted); text-align:center; }
+.song {
+  background:var(--card); border-radius:var(--radius); padding:14px;
+  margin-top:12px; border-left:4px solid var(--accent); position:relative;
+}
+.rank {
+  position:absolute; top:-8px; left:-10px; width:28px; height:28px;
+  border-radius:50%; background:var(--grad); color:#fff;
+  font-size:.85rem; font-weight:800; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.4);
+}
+.song h3 { font-size:1.05rem; }
+.song .artist { color:var(--accent2); font-size:.85rem; margin-top:2px; }
+.song .reason { font-size:.85rem; margin-top:8px; line-height:1.6; }
+.meta { display:flex; gap:8px; margin-top:8px; }
+.badge { background:var(--card2); border-radius:6px; padding:3px 8px; font-size:.72rem; color:var(--muted); }
+.actions { display:flex; gap:6px; margin-top:12px; }
+.actions button {
+  flex:1; min-height:44px; background:var(--card2); border:1px solid var(--line);
+  color:#fff; border-radius:10px; font-size:.78rem; cursor:pointer; font-family:inherit;
+}
+.actions button.done { background:var(--accent2); border-color:transparent; }
+
+/* スケルトン */
+.skel { border-left-color:var(--line); }
+.sk { border-radius:6px; background:linear-gradient(90deg,var(--card2) 25%,#31314a 50%,var(--card2) 75%);
+  background-size:200% 100%; animation:shimmer 1.4s infinite; }
+@keyframes shimmer { to { background-position:-200% 0; } }
+.sk.t { height:18px; width:55%; }
+.sk.a { height:12px; width:35%; margin-top:8px; }
+.sk.r { height:12px; width:95%; margin-top:12px; }
+.sk.r2 { height:12px; width:80%; margin-top:6px; }
+
+.retry {
+  display:block; width:100%; margin-top:14px; padding:14px;
+  background:var(--card2); border:1px solid var(--line); color:#fff;
+  border-radius:10px; font-size:.9rem; cursor:pointer; font-family:inherit;
+}
+
+/* ── 下部固定CTA ── */
+.cta-bar {
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:100%; max-width:420px; z-index:100;
+  padding:10px 14px max(12px, env(safe-area-inset-bottom));
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+}
+.cta {
+  width:100%; padding:16px; border:none; border-radius:14px;
+  background:var(--grad); color:#fff; font-size:1.05rem; font-weight:800;
+  cursor:pointer; font-family:inherit;
+  box-shadow:0 4px 20px rgba(255,92,138,.35);
+}
+
+/* ── 設定シート（⚙で開く。モックでは開いた状態を下に表示） ── */
+.sheet-demo { margin-top:36px; border-top:2px dashed var(--line); padding-top:10px; }
+.sheet-demo .cap { font-size:.7rem; color:var(--muted); text-align:center; margin-bottom:8px; }
+.sheet {
+  background:var(--card); border-radius:20px 20px 0 0; padding:18px 16px 24px;
+  border:1px solid var(--line); border-bottom:none;
+}
+.sheet .bar { width:44px; height:5px; border-radius:3px; background:var(--line); margin:0 auto 14px; }
+.sheet h2 { font-size:1rem; margin-bottom:4px; }
+.frow { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:.85rem; }
+.frow label { color:var(--muted); flex-shrink:0; }
+.frow input, .frow select {
+  background:var(--card2); border:1px solid var(--line); border-radius:10px;
+  color:var(--text); padding:10px; font-size:16px; max-width:140px;
+}
+.acc { margin-top:18px; }
+.acc summary { cursor:pointer; list-style:none; font-size:.92rem; font-weight:700; }
+.acc summary::before { content:"▸ "; color:var(--muted); }
+.acc[open] summary::before { content:"▾ "; }
+.cnt { background:var(--card2); border:1px solid var(--line); border-radius:999px;
+  padding:2px 10px; font-size:.72rem; color:var(--muted); margin-left:6px; }
+.build { font-size:.65rem; color:var(--muted); text-align:center; margin-top:18px; }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <header>
+    <h1>🎤 カラオケAIオススメ</h1>
+    <button class="gear">⚙<span class="dot"></span></button>
+  </header>
+
+  <section>
+    <h2>🌤 今日の気分</h2>
+    <div class="chips">
+      <button class="chip">激しい</button>
+      <button class="chip sel">しっとり</button>
+      <button class="chip">ゆっくり</button>
+      <button class="chip">速い</button>
+      <button class="chip sel">泣ける</button>
+      <button class="chip">盛り上がる</button>
+    </div>
+    <textarea placeholder="例: 疲れてるからしっとりバラード気分。でも最後は盛り上がりたい">疲れてるのでバラード中心で</textarea>
+  </section>
+
+  <section>
+    <h2>🏟 今日のセッション <span class="hint" style="display:inline">(朝6時にリセット)</span></h2>
+    <p class="hint">周りで歌われた曲</p>
+    <div class="input-row">
+      <input type="text" placeholder="例: 小さな恋のうた">
+      <button class="add-btn">＋</button>
+    </div>
+    <div class="chips" style="margin-top:10px">
+      <span class="tag">小さな恋のうた <button>✕</button></span>
+      <span class="tag">マリーゴールド <button>✕</button></span>
+    </div>
+    <p class="hint" style="margin-top:14px">今日自分が歌った曲</p>
+    <div class="input-row">
+      <input type="text" placeholder="例: 天体観測">
+      <button class="add-btn">＋</button>
+    </div>
+    <div class="chips" style="margin-top:10px">
+      <span class="tag">天体観測 <button>✕</button></span>
+    </div>
+  </section>
+
+  <div class="result-head">あなたへのオススメ 5曲</div>
+
+  <div class="song">
+    <div class="rank">1</div>
+    <h3>楓</h3>
+    <div class="artist">スピッツ</div>
+    <div class="reason">しっとり・泣ける気分にぴったりのバラード。世代的にも青春ど真ん中で、周りの選曲（マリーゴールド）とも雰囲気がつながります。</div>
+    <div class="meta"><span class="badge">キー: 原曲でOK</span><span class="badge">難易度: ★★☆</span></div>
+    <div class="actions">
+      <button>🎤 歌った</button>
+      <button class="done">✅ 好きに追加済み</button>
+      <button>🚫 除外</button>
+    </div>
+  </div>
+
+  <!-- ロード中のスケルトン例 -->
+  <div class="song skel">
+    <div class="rank" style="background:var(--card2)">2</div>
+    <div class="sk t"></div>
+    <div class="sk a"></div>
+    <div class="sk r"></div>
+    <div class="sk r2"></div>
+  </div>
+
+  <button class="retry">🔄 別の候補を出す</button>
+
+  <!-- 設定シート（⚙タップで下からスライドイン。モックのため展開状態を掲載） -->
+  <div class="sheet-demo">
+    <div class="cap">▼ ⚙タップで開く設定シート（ボトムシート）のモック ▼</div>
+    <div class="sheet">
+      <div class="bar"></div>
+      <h2>👤 プロフィール</h2>
+      <div class="frow"><label>生まれ年:</label><input type="number" value="1986"> <span class="hint" style="margin:0">年</span></div>
+      <div class="frow"><label>性別:</label>
+        <select><option>未設定</option><option selected>男性</option><option>女性</option></select>
+      </div>
+      <details class="acc" open>
+        <summary>💖 好きな曲・アーティスト<span class="cnt">3</span></summary>
+        <div class="input-row" style="margin-top:10px">
+          <input type="text" placeholder="例: YOASOBI、Lemon">
+          <button class="add-btn">＋</button>
+        </div>
+        <div class="chips" style="margin-top:10px">
+          <span class="tag">スピッツ <button>✕</button></span>
+          <span class="tag">Lemon <button>✕</button></span>
+          <span class="tag">BUMP OF CHICKEN <button>✕</button></span>
+        </div>
+      </details>
+      <details class="acc">
+        <summary>🚫 歌わない・知らない曲<span class="cnt">2</span></summary>
+      </details>
+      <div class="build">更新: __BUILD_TIME__</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="cta-bar">
+  <button class="cta">オススメしてもらう 🎶</button>
+</div>
+</body>
+</html>
