@@ -9,7 +9,7 @@ const path = require("path");
 const PORT = process.env.PORT || 8080;
 const HOST = "0.0.0.0";
 const API_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
+const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001"; // MODEL が404のとき自動で切替
 
 const INDEX_PATH = path.join(__dirname, "index.html");
