@@ -78,9 +78,14 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
       body: JSON.stringify({
         model,
         max_tokens: 8000,
-        system: systemPrompt,
+        // システムプロンプトは全リクエストで同一内容なのでプロンプトキャッシュ対象にする。
+        // 2回目以降(5分以内)のアクセスはこのブロック分の入力トークンが約1/10のコストになる
+        system: [
+          { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+        ],
         tools: [
-          { type: "web_search_20250305", name: "web_search", max_uses: 8 },
+          // 8→5: 曲5つの実在確認+多少の言い換え検索で足りるため、検索課金を抑える
+          { type: "web_search_20250305", name: "web_search", max_uses: 5 },
         ],
         messages: [{ role: "user", content: userPrompt }],
       }),
@@ -112,9 +117,10 @@ async function getRecommendations({ favorites, mood, moodTags, aroundToday, sung
       res = await callAPI(usedModel);
     }
 
-    // 一時的なエラー(429=混雑 / 529=過負荷 / 5xx)は少し待って最大2回まで自動再試行
-    for (let retry = 0; !res.ok && (res.status === 429 || res.status === 529 || res.status >= 500) && retry < 2; retry++) {
-      const waitMs = 1500 * 2 ** retry; // 1.5秒 → 3秒
+    // 一時的なエラー(429=混雑 / 529=過負荷 / 5xx)は少し待って最大1回まで自動再試行
+    // (検索ツール込みの呼び出しは高コストなので、無闇なリトライ回数は増やさない)
+    for (let retry = 0; !res.ok && (res.status === 429 || res.status === 529 || res.status >= 500) && retry < 1; retry++) {
+      const waitMs = 1500 * 2 ** retry; // 1.5秒
       console.warn(`一時的なエラー(${res.status})。${waitMs}ms待って再試行します (${retry + 1}/2)`);
       await new Promise((r) => setTimeout(r, waitMs));
       res = await callAPI(usedModel);
