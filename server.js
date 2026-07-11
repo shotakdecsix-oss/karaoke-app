@@ -283,7 +283,8 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         return res.end("index.html を読み込めません");
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      // no-store: index.html はデプロイ日時を埋め込むため、ブラウザ/CDNにキャッシュさせない
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
       res.end(html.replace("__BUILD_TIME__", getBuildTime()));
     });
   }
